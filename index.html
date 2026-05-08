@@ -1,1 +1,256 @@
+<!DOCTYPE html>
+<html lang="am">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0, maximum-scale=1.0, user-scalable=no">
+    <title>ከሊል አፕ - Snake Game</title>
+    <style>
+        * { box-sizing: border-box; -webkit-tap-highlight-color: transparent; }
+        body {
+            margin: 0; padding: 0; display: flex; flex-direction: column;
+            align-items: center; background: #000; color: #00ff00; 
+            font-family: 'Segoe UI', Arial, sans-serif; height: 100vh; overflow: hidden;
+            position: fixed; width: 100%;
+        }
+        
+        /* የመግቢያ ማስታወቂያ */
+        #splash-screen {
+            position: fixed; top: 0; left: 0; width: 100%; height: 100%;
+            background: #000; display: flex; flex-direction: column; 
+            align-items: center; justify-content: center; z-index: 1000; text-align: center;
+        }
+
+        .header { 
+            width: 100%; height: 45px; display: flex; justify-content: space-between; 
+            align-items: center; background: #111; border-bottom: 2px solid #00ff00; 
+            padding: 0 10px; flex-shrink: 0;
+        }
+
+        .rank-btn {
+            background: #ffcc00; color: #000; border: none; border-radius: 4px;
+            padding: 2px 8px; font-weight: bold; font-size: 11px; cursor: pointer;
+        }
+
+        #game-board { 
+            position: relative; width: 100%; height: 50vh;
+            display: flex; align-items: center; justify-content: center;
+            padding: 5px; background: #000; flex-shrink: 0;
+        }
+
+        canvas { 
+            background: #050505; border: 3px solid #00ff00; 
+            box-shadow: 0 0 15px rgba(0, 255, 0, 0.3);
+            max-width: 100%; max-height: 100%;
+        }
+
+        #score-modal {
+            display: none; position: fixed; top: 50%; left: 50%; 
+            transform: translate(-50%, -50%); background: rgba(0,0,0,0.95);
+            border: 2px solid #00ff00; padding: 20px; border-radius: 15px;
+            z-index: 200; width: 80%; max-width: 250px; text-align: center;
+        }
+
+        .score-item {
+            display: flex; justify-content: space-between;
+            border-bottom: 1px solid #222; padding: 5px 0; font-size: 15px; color: #fff;
+        }
+
+        .pad-container {
+            flex: 1; width: 100%; max-width: 220px;
+            display: grid; grid-template-columns: repeat(3, 1fr); 
+            gap: 8px; padding: 10px; margin-bottom: 60px; align-content: center;
+        }
+        
+        .touch-btn {
+            background: rgba(0, 255, 0, 0.05); border: 2px solid #00ff00;
+            border-radius: 12px; height: 52px; width: 65px; display: flex; 
+            align-items: center; justify-content: center;
+            font-size: 22px; color: #00ff00; user-select: none; margin: auto;
+        }
+
+        #menu {
+            position: absolute; top: 0; left: 0; width: 100%; height: 100%;
+            background: rgba(0,0,0,0.9); display: flex; flex-direction: column;
+            align-items: center; justify-content: center; z-index: 100;
+        }
+    </style>
+</head>
+<body>
+
+    <div id="splash-screen">
+        <h1 style="color:#00ff00;">ከሊል አፕ</h1>
+        <p style="color:#fff; padding: 0 20px;">ዌብሳይት ወይም አፕሊኬሽን ለማሰራት በዚህ ስልክ ይደውሉ <br><b style="color:#ffcc00; font-size:20px;">0927713359</b></p>
+    </div>
+
+    <div class="header">
+        <div style="font-size: 12px;">ውጤት: <span id="score">0</span></div>
+        <div style="display: flex; gap: 5px; align-items: center;">
+            <select id="difficulty" style="background:#00ff00; font-weight:bold; border-radius:4px; font-size:10px; border:none;">
+                <option value="150">ቀላል</option>
+                <option value="100" selected>መካከለኛ</option>
+                <option value="70">ፈጣን</option>
+            </select>
+            <button class="rank-btn" onclick="toggleScores()">ደረጃ</button>
+        </div>
+        <div style="font-size: 12px;">ምርጥ: <span id="best-score-top">0</span></div>
+    </div>
+
+    <div id="game-board">
+        <canvas id="snakeCanvas"></canvas>
+        
+        <div id="score-modal">
+            <h3 style="color:#ffcc00; margin-top:0;">ከፍተኛ 5 ውጤቶች</h3>
+            <div id="scores-list"></div>
+            <button onclick="toggleScores()" style="margin-top:15px; background:#00ff00; border:none; padding:5px 20px; border-radius:15px; font-weight:bold;">ዝጋ</button>
+        </div>
+
+        <div id="menu" style="display:none;">
+            <h2 id="menu-title" style="color:#00ff00;">ከሊል እባብ</h2>
+            <button onclick="startGame()" style="padding:12px 40px; background:#00ff00; border:none; border-radius:25px; font-weight:bold; color:#000;">ጀምር</button>
+        </div>
+    </div>
+
+    <div class="pad-container">
+        <div></div><div class="touch-btn" id="btn-up">▲</div><div></div>
+        <div class="touch-btn" id="btn-left">◀</div>
+        <div class="touch-btn" style="border-color:#ffcc00; color:#ffcc00;" onclick="isPaused = !isPaused">⏸</div>
+        <div class="touch-btn" id="btn-right">▶</div>
+        <div></div><div class="touch-btn" id="btn-down">▼</div><div></div>
+    </div>
+
+<script>
+    const canvas = document.getElementById("snakeCanvas");
+    const ctx = canvas.getContext("2d");
+    const grid = 20;
+    let snake, food, dx, dy, score, interval, isPaused = false;
+
+    // ድምፅ
+    const audioCtx = new (window.AudioContext || window.webkitAudioContext)();
+    function playTone(freq, dur, type) {
+        const osc = audioCtx.createOscillator();
+        const gain = audioCtx.createGain();
+        osc.type = type; osc.frequency.setValueAtTime(freq, audioCtx.currentTime);
+        gain.gain.setValueAtTime(0.05, audioCtx.currentTime);
+        osc.connect(gain); gain.connect(audioCtx.destination);
+        osc.start(); osc.stop(audioCtx.currentTime + dur);
+    }
+
+    // Splash screen timer
+    window.onload = () => {
+        setTimeout(() => {
+            document.getElementById("splash-screen").style.display = "none";
+            document.getElementById("menu").style.display = "flex";
+            updateTopScoreDisplay();
+            resizeCanvas();
+        }, 3000);
+    };
+
+    function toggleScores() {
+        const modal = document.getElementById("score-modal");
+        if(modal.style.display === "block") {
+            modal.style.display = "none";
+        } else {
+            displayScores();
+            modal.style.display = "block";
+        }
+    }
+
+    function displayScores() {
+        const scores = JSON.parse(localStorage.getItem("snakeScores") || "[]");
+        const container = document.getElementById("scores-list");
+        container.innerHTML = "";
+        scores.forEach((s, i) => {
+            container.innerHTML += `<div class="score-item"><span>ደረጃ ${i+1}</span> <span>${s}</span></div>`;
+        });
+        if(scores.length === 0) container.innerHTML = "ምንም ውጤት የለም";
+    }
+
+    function updateTopScoreDisplay() {
+        const scores = JSON.parse(localStorage.getItem("snakeScores") || "[]");
+        document.getElementById("best-score-top").innerText = scores[0] || 0;
+    }
+
+    function saveScore(s) {
+        let scores = JSON.parse(localStorage.getItem("snakeScores") || "[]");
+        scores.push(s);
+        scores.sort((a,b) => b-a);
+        scores = scores.slice(0, 5);
+        localStorage.setItem("snakeScores", JSON.stringify(scores));
+        updateTopScoreDisplay();
+    }
+
+    function resizeCanvas() {
+        const board = document.getElementById("game-board");
+        canvas.width = Math.floor((board.clientWidth - 10) / grid) * grid;
+        canvas.height = Math.floor((board.clientHeight - 10) / grid) * grid;
+    }
+
+    function startGame() {
+        if (audioCtx.state === 'suspended') audioCtx.resume();
+        document.getElementById("menu").style.display = "none";
+        document.getElementById("score-modal").style.display = "none";
+        score = 0; document.getElementById("score").innerText = 0;
+        dx = grid; dy = 0; isPaused = false;
+        let midX = Math.floor((canvas.width/grid)/2)*grid;
+        let midY = Math.floor((canvas.height/grid)/2)*grid;
+        snake = [{x: midX, y: midY}, {x: midX-grid, y: midY}];
+        createFood();
+        if(interval) clearInterval(interval);
+        interval = setInterval(main, parseInt(document.getElementById("difficulty").value));
+    }
+
+    function createFood() {
+        food = {
+            x: Math.floor(Math.random() * (canvas.width / grid)) * grid,
+            y: Math.floor(Math.random() * (canvas.height / grid)) * grid
+        };
+        if(snake.some(p => p.x === food.x && p.y === food.y)) createFood();
+    }
+
+    function main() {
+        if (isPaused) return;
+        const head = {x: snake[0].x + dx, y: snake[0].y + dy};
+        if (head.x < 0 || head.x >= canvas.width || head.y < 0 || head.y >= canvas.height || 
+            snake.some(p => p.x === head.x && p.y === head.y)) {
+            playTone(150, 0.3, "sawtooth");
+            saveScore(score);
+            document.getElementById("menu-title").innerText = "አልቋል! ውጤት: " + score;
+            document.getElementById("menu").style.display = "flex";
+            clearInterval(interval); return;
+        }
+        snake.unshift(head);
+        if (head.x === food.x && head.y === food.y) {
+            score += 10; document.getElementById("score").innerText = score;
+            playTone(600, 0.1, "sine"); createFood();
+        } else { snake.pop(); }
+        draw();
+    }
+
+    function draw() {
+        ctx.fillStyle = "#000"; ctx.fillRect(0, 0, canvas.width, canvas.height);
+        ctx.fillStyle = "rgba(0, 255, 0, 0.05)"; ctx.font = "bold 30px Arial";
+        ctx.textAlign = "center"; ctx.fillText("KHALIL", canvas.width/2, canvas.height/2+10);
+        ctx.fillStyle = "#ff0055"; ctx.fillRect(food.x+2, food.y+2, grid-4, grid-4);
+        snake.forEach((p, i) => {
+            ctx.fillStyle = (i === 0) ? "#00ff00" : "#008800";
+            ctx.fillRect(p.x+1, p.y+1, grid-2, grid-2);
+        });
+    }
+
+    const handleDir = (id, d) => {
+        const set = () => {
+            if (d === 'U' && dy === 0) { dx = 0; dy = -grid; }
+            if (d === 'D' && dy === 0) { dx = 0; dy = grid; }
+            if (d === 'L' && dx === 0) { dx = -grid; dy = 0; }
+            if (d === 'R' && dx === 0) { dx = grid; dy = 0; }
+        };
+        document.getElementById(id).addEventListener('touchstart', (e) => { e.preventDefault(); set(); });
+        document.getElementById(id).onclick = set;
+    };
+    handleDir('btn-up','U'); handleDir('btn-down','D');
+    handleDir('btn-left','L'); handleDir('btn-right','R');
+    window.addEventListener('resize', resizeCanvas);
+</script>
+</body>
+</html>
 
